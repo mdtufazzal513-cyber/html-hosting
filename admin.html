@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; margin: 0; padding: 20px; }
+        
+        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .search-box { display: flex; gap: 10px; width: 100%; max-width: 400px; }
+        input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+        
+        .filters { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; }
+        .filter-btn { padding: 8px 16px; border-radius: 20px; border: none; background: #e2e8f0; cursor: pointer; font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+        .filter-btn.active { background: #4f46e5; color: white; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+        
+        .site-card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #4f46e5; position: relative; }
+        .site-card.reported { border-left-color: #f59e0b; background: #fffbeb; }
+        .site-card.deleted { border-left-color: #ef4444; opacity: 0.6; }
+
+        .stats { display: flex; gap: 15px; font-size: 0.85rem; color: #64748b; margin: 10px 0; }
+        .stat-item i { margin-right: 5px; }
+
+        .btn-sm { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-right: 5px; }
+        .btn-del { background: #fee2e2; color: #991b1b; }
+        .btn-safe { background: #dcfce7; color: #166534; }
+    </style>
+</head>
+<body>
+
+    <div id="login" style="height:100vh; display:flex; justify-content:center; align-items:center;">
+        <div style="background:white; padding:30px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); text-align:center;">
+            <h2>🔐 Admin Login</h2>
+            <input type="email" id="email" placeholder="Email" style="width:100%; margin-bottom:10px;">
+            <input type="password" id="pass" placeholder="Password" style="width:100%; margin-bottom:10px;">
+            <button onclick="login()" style="width:100%; padding:10px; background:#4f46e5; color:white; border:none; border-radius:6px; cursor:pointer;">Login</button>
+        </div>
+    </div>
+
+    <div id="dash" style="display:none;">
+        <div class="header-bar">
+            <h3>Dashboard</h3>
+            <button onclick="auth.signOut()" class="btn-sm" style="background:#ddd;">Logout</button>
+        </div>
+
+        <div class="search-box" style="margin-bottom:20px;">
+            <input type="text" id="searchInput" placeholder="Search by Site ID...">
+            <button onclick="runSearch()" style="padding:10px; background:#4f46e5; color:white; border:none; border-radius:6px;">Search</button>
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" onclick="setFilter('all', this)">All Sites</button>
+            <button class="filter-btn" onclick="setFilter('reported', this)">⚠️ Reported</button>
+            <button class="filter-btn" onclick="setFilter('deleted', this)">🗑️ Deleted</button>
+        </div>
+
+        <div id="list" class="grid">Loading...</div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-fR5yCte_c2pHpd0WD5IVjWmUvfUl5wA",
+            authDomain: "html-code-hosting.firebaseapp.com",
+            projectId: "html-code-hosting",
+            storageBucket: "html-code-hosting.firebasestorage.app",
+            messagingSenderId: "22191194064",
+            appId: "1:22191194064:web:47fcd0b42f0f770ede43d5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentFilter = 'all';
+
+        auth.onAuthStateChanged(u => {
+            document.getElementById(u ? 'login' : 'dash').style.display = 'none';
+            document.getElementById(u ? 'dash' : 'login').style.display = u ? 'block' : 'flex';
+            if(u) loadSites();
+        });
+
+        function login(){
+            const e = document.getElementById('email').value;
+            const p = document.getElementById('pass').value;
+            auth.signInWithEmailAndPassword(e,p).catch(err=>alert(err.message));
+        }
+
+        function loadSites(query = null) {
+            let ref = db.collection('sites').orderBy('createdAt', 'desc').limit(50);
+            
+            if (currentFilter === 'reported') ref = db.collection('sites').where('reportCount', '>', 0).orderBy('reportCount', 'desc');
+            if (currentFilter === 'deleted') ref = db.collection('sites').where('status', '==', 'deleted');
+            
+            if (query) {
+                // Simple client side search for ID (Firestore doesn't support regex search easily)
+                ref = db.collection('sites').where('__name__', '==', query);
+            }
+
+            ref.onSnapshot(snap => {
+                const list = document.getElementById('list');
+                list.innerHTML = '';
+                if(snap.empty) { list.innerHTML = '<p>No data found.</p>'; return; }
+
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const isReported = d.reportCount > 0;
+                    const isDel = d.status === 'deleted';
+                    
+                    let cardClass = '';
+                    if(isReported) cardClass = 'reported';
+                    if(isDel) cardClass = 'deleted';
+
+                    list.innerHTML += `
+                        <div class="site-card ${cardClass}">
+                            <div style="font-weight:bold; color:#333;">ID: ${doc.id}</div>
+                            <div class="stats">
+                                <span class="stat-item"><i class="fa-solid fa-eye"></i> ${d.views || 0}</span>
+                                <span class="stat-item" style="color:${isReported?'red':'inherit'}"><i class="fa-solid fa-flag"></i> ${d.reportCount || 0}</span>
+                            </div>
+                            <div style="font-size:12px; color:#666; margin-bottom:10px;">PIN: ${d.pin || 'N/A'}</div>
+                            
+                            <div style="display:flex; gap:5px;">
+                                <a href="view.html?id=${doc.id}" target="_blank" class="btn-sm" style="background:#e0f2fe; color:#0369a1; text-decoration:none;">View</a>
+                                ${!isDel ? `<button class="btn-sm btn-del" onclick="del('${doc.id}')">Delete</button>` : ''}
+                                ${isReported ? `<button class="btn-sm btn-safe" onclick="clearReports('${doc.id}')">Ignore</button>` : ''}
+                            </div>
+                        </div>`;
+                });
+            });
+        }
+
+        function setFilter(type, btn) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadSites();
+        }
+
+        function runSearch() {
+            const q = document.getElementById('searchInput').value.trim();
+            if(q) loadSites(q);
+            else loadSites();
+        }
+
+        function del(id) {
+            if(confirm('Delete this site?')) db.collection('sites').doc(id).update({status:'deleted'});
+        }
+        function clearReports(id) {
+            if(confirm('Mark as Safe?')) db.collection('sites').doc(id).update({reportCount:0});
+        }
+    </script>
+</body>
+</html>
