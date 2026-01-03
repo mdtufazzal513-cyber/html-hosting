@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Admin Panel</title>
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f1f5f9; margin: 0; padding: 20px; color: #334155; }
+        
+        /* Login Screen */
+        #loginSection { height: 100vh; display: flex; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; background: #f1f5f9; z-index: 1000; }
+        .login-card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 100%; max-width: 350px; text-align: center; }
+        .login-card h2 { color: #0f172a; margin-bottom: 20px; }
+        
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; transition: 0.3s; }
+        input:focus { border-color: #4f46e5; outline: none; }
+        
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 1rem; }
+        .btn-login { background: #0f172a; color: white; margin-top: 15px; }
+        .btn-login:hover { background: #1e293b; }
+
+        /* Dashboard */
+        #dashboardSection { display: none; max-width: 1200px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .btn-logout { background: #fee2e2; color: #991b1b; padding: 8px 20px; width: auto; font-size: 0.9rem; }
+
+        /* Grid Layout */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+        
+        .site-card { background: white; padding: 20px; border-radius: 12px; border-left: 5px solid #4f46e5; box-shadow: 0 2px 5px rgba(0,0,0,0.03); position: relative; }
+        .site-card.deleted { border-left-color: #ef4444; opacity: 0.6; background: #fef2f2; }
+        .site-card.reported { border-left-color: #f59e0b; background: #fffbeb; }
+
+        .meta { display: flex; gap: 15px; font-size: 0.85rem; color: #64748b; margin: 10px 0; }
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
+        
+        .actions { margin-top: 15px; display: flex; gap: 8px; }
+        .btn-sm { flex: 1; padding: 8px; font-size: 0.85rem; border-radius: 6px; }
+        .btn-view { background: #e0f2fe; color: #0284c7; }
+        .btn-del { background: #fee2e2; color: #dc2626; }
+        .btn-safe { background: #dcfce7; color: #166534; }
+    </style>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+    <!-- Login UI -->
+    <div id="loginSection">
+        <div class="login-card">
+            <div style="font-size: 3rem; color: #0f172a; margin-bottom: 10px;"><i class="fa-solid fa-user-shield"></i></div>
+            <h2>Admin Access</h2>
+            <input type="email" id="email" placeholder="Admin Email">
+            <input type="password" id="pass" placeholder="Password">
+            <button class="btn-login" onclick="login()">Secure Login</button>
+            <p id="errorMsg" style="color:red; font-size:0.9rem; margin-top:10px; display:none;"></p>
+        </div>
+    </div>
+
+    <!-- Dashboard UI -->
+    <div id="dashboardSection">
+        <div class="header">
+            <h2 style="margin:0;"><i class="fa-solid fa-gauge-high"></i> Dashboard</h2>
+            <button class="btn-logout" onclick="logout()"><i class="fa-solid fa-power-off"></i> Logout</button>
+        </div>
+
+        <!-- Filter Buttons -->
+        <div style="margin-bottom: 20px; display:flex; gap:10px; overflow-x:auto;">
+            <button onclick="loadSites('all')" style="width:auto; background:#0f172a; color:white; padding:8px 15px;">All Sites</button>
+            <button onclick="loadSites('reported')" style="width:auto; background:#f59e0b; color:white; padding:8px 15px;">⚠️ Reported</button>
+            <button onclick="loadSites('deleted')" style="width:auto; background:#ef4444; color:white; padding:8px 15px;">🗑️ Deleted</button>
+        </div>
+
+        <div id="list" class="grid">
+            <p>Loading data...</p>
+        </div>
+    </div>
+
+    <script>
+        // 1. Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-fR5yCte_c2pHpd0WD5IVjWmUvfUl5wA",
+            authDomain: "html-code-hosting.firebaseapp.com",
+            projectId: "html-code-hosting",
+            storageBucket: "html-code-hosting.firebasestorage.app",
+            messagingSenderId: "22191194064",
+            appId: "1:22191194064:web:47fcd0b42f0f770ede43d5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // ⚠️ HARDCODED ADMIN UID
+        const ADMIN_UID = "LKDY5vZJFiVhM1ZlPvnnHK4V0ZK2";
+
+        // 2. Auth State Listener
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // চেক করা হচ্ছে লগইন করা ইউজার আসল এডমিন কিনা
+                if (user.uid === ADMIN_UID) {
+                    showDashboard();
+                    loadSites('all');
+                } else {
+                    // ইউআইডি না মিললে বের করে দেওয়া হবে
+                    alert("⛔ Access Denied! You are not the authorized Admin.");
+                    auth.signOut();
+                }
+            } else {
+                showLogin();
+            }
+        });
+
+        // 3. Login Function
+        function login() {
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('pass').value;
+            const errorMsg = document.getElementById('errorMsg');
+
+            auth.signInWithEmailAndPassword(email, pass)
+                .then((cred) => {
+                    if (cred.user.uid !== ADMIN_UID) {
+                        // যদি লগইন সফল হয় কিন্তু UID না মিলে
+                        auth.signOut();
+                        errorMsg.innerText = "This account is not authorized as Admin.";
+                        errorMsg.style.display = 'block';
+                    }
+                    // UID মিললে onAuthStateChanged অটোমেটিক ড্যাশবোর্ড দেখাবে
+                })
+                .catch(err => {
+                    errorMsg.innerText = "Error: " + err.message;
+                    errorMsg.style.display = 'block';
+                });
+        }
+
+        function logout() {
+            auth.signOut();
+        }
+
+        // 4. UI Toggle
+        function showLogin() {
+            document.getElementById('loginSection').style.display = 'flex';
+            document.getElementById('dashboardSection').style.display = 'none';
+        }
+        function showDashboard() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'block';
+        }
+
+        // 5. Load Data
+        function loadSites(filterType) {
+            const list = document.getElementById('list');
+            list.innerHTML = '<p style="padding:20px;">Fetching sites...</p>';
+
+            let query = db.collection('sites').orderBy('createdAt', 'desc').limit(50);
+
+            if (filterType === 'reported') {
+                query = db.collection('sites').where('reportCount', '>', 0).orderBy('reportCount', 'desc');
+            } else if (filterType === 'deleted') {
+                query = db.collection('sites').where('status', '==', 'deleted');
+            }
+
+            query.onSnapshot(snap => {
+                list.innerHTML = '';
+                if (snap.empty) {
+                    list.innerHTML = '<p style="padding:20px;">No sites found.</p>';
+                    return;
+                }
+
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const isReported = d.reportCount > 0;
+                    const isDeleted = d.status === 'deleted';
+                    
+                    // Card Class Determine
+                    let cardClass = 'site-card';
+                    if (isDeleted) cardClass += ' deleted';
+                    else if (isReported) cardClass += ' reported';
+
+                    list.innerHTML += `
+                        <div class="${cardClass}">
+                            <div style="font-weight:bold; margin-bottom:5px;">${doc.id}</div>
+                            
+                            <div class="meta">
+                                <span><i class="fa-solid fa-eye"></i> ${d.views || 0}</span>
+                                <span style="color:${isReported ? 'red' : 'inherit'}">
+                                    <i class="fa-solid fa-flag"></i> ${d.reportCount || 0}
+                                </span>
+                                <span><i class="fa-solid fa-key"></i> ${d.pin || 'No PIN'}</span>
+                            </div>
+
+                            <div class="actions">
+                                <button class="btn-sm btn-view" onclick="window.open('view.html?id=${doc.id}', '_blank')">View</button>
+                                
+                                ${!isDeleted ? `<button class="btn-sm btn-del" onclick="deleteSite('${doc.id}')">Delete</button>` : ''}
+                                
+                                ${isReported ? `<button class="btn-sm btn-safe" onclick="ignoreReport('${doc.id}')">Ignore</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        // 6. Admin Actions
+        function deleteSite(id) {
+            if(confirm("Are you sure you want to delete this site?")) {
+                db.collection('sites').doc(id).update({ status: 'deleted' })
+                  .then(() => alert("Site Deleted!"))
+                  .catch(err => alert("Error: " + err.message));
+            }
+        }
+
+        function ignoreReport(id) {
+            if(confirm("Mark this site as Safe? (Reset reports)")) {
+                db.collection('sites').doc(id).update({ reportCount: 0 });
+            }
+        }
+    </script>
+</body>
+</html>
