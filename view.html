@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Loading...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
+        
+        #loading { position: fixed; inset: 0; background: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%; animation: spin 1s infinite linear; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        /* Report Button (Floating) */
+        .report-btn { position: fixed; bottom: 15px; right: 15px; background: rgba(255,255,255,0.8); border: 1px solid #ddd; padding: 8px 12px; border-radius: 20px; color: #666; font-size: 12px; cursor: pointer; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: 0.3s; }
+        .report-btn:hover { background: #fee2e2; color: #dc2626; }
+
+        /* Fullscreen Frame */
+        iframe { width: 100vw; height: 100vh; border: none; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <p style="color:#666; margin-top:10px;">Loading Site...</p>
+    </div>
+
+    <button id="repBtn" class="report-btn" onclick="reportSite()"><i class="fa-solid fa-flag"></i> Report Abuse</button>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-fR5yCte_c2pHpd0WD5IVjWmUvfUl5wA",
+            authDomain: "html-code-hosting.firebaseapp.com",
+            projectId: "html-code-hosting",
+            storageBucket: "html-code-hosting.firebasestorage.app",
+            messagingSenderId: "22191194064",
+            appId: "1:22191194064:web:47fcd0b42f0f770ede43d5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+
+        if(id) {
+            const docRef = db.collection('sites').doc(id);
+            
+            docRef.get().then(doc => {
+                if(doc.exists && doc.data().status === 'active') {
+                    // 1. Render HTML
+                    document.open();
+                    document.write(doc.data().html);
+                    
+                    // Restore report button (because document.write clears it)
+                    const btnHTML = `<button style="position:fixed; bottom:15px; right:15px; background:rgba(255,255,255,0.9); border:1px solid #ccc; padding:8px 12px; border-radius:20px; color:#666; font-size:12px; cursor:pointer; z-index:9999; font-family:sans-serif;" onclick="reportAbuse('${id}')">⚠️ Report</button>`;
+                    document.write(btnHTML);
+                    
+                    document.close();
+
+                    // 2. Increment View Count
+                    // Note: This requires appropriate Firestore Rules
+                    docRef.update({ views: firebase.firestore.FieldValue.increment(1) });
+
+                } else {
+                    document.getElementById('loading').innerHTML = "<h2 style='color:red'>⛔ Site Not Found or Deleted</h2>";
+                }
+            }).catch(e => {
+                document.getElementById('loading').innerHTML = "<h2>Error Loading Site</h2>";
+            });
+        }
+
+        // Global function for the injected button
+        window.reportAbuse = function(siteId) {
+            if(confirm("Report this site for inappropriate content?")) {
+                const dbInst = firebase.firestore();
+                dbInst.collection('sites').doc(siteId).update({
+                    reportCount: firebase.firestore.FieldValue.increment(1)
+                }).then(() => alert("Thanks. We will review this site."))
+                  .catch(e => alert("Error reporting."));
+            }
+        }
+    </script>
+</body>
+</html>
