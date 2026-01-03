@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Site Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body style="margin:0; padding:0; overflow:hidden;">
+
+    <div id="loader" style="height:100vh; display:flex; justify-content:center; align-items:center;">
+        <h2>Loading...</h2>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-fR5yCte_c2pHpd0WD5IVjWmUvfUl5wA",
+            authDomain: "html-code-hosting.firebaseapp.com",
+            projectId: "html-code-hosting",
+            storageBucket: "html-code-hosting.firebasestorage.app",
+            messagingSenderId: "22191194064",
+            appId: "1:22191194064:web:47fcd0b42f0f770ede43d5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const id = new URLSearchParams(window.location.search).get('id');
+
+        if(id) {
+            const ref = db.collection('sites').doc(id);
+            ref.get().then(doc => {
+                if(doc.exists && doc.data().status === 'active') {
+                    // 1. Write HTML
+                    document.open();
+                    document.write(doc.data().html);
+                    
+                    // 2. Inject Report Button
+                    const btn = document.createElement('div');
+                    btn.innerHTML = `<button onclick="window.doRep('${id}')" style="position:fixed; bottom:10px; right:10px; background:white; border:1px solid red; padding:5px 10px; border-radius:20px; color:red; cursor:pointer; font-size:12px; z-index:9999;">⚠️ Report</button>`;
+                    document.body.appendChild(btn);
+                    
+                    document.close();
+
+                    // 3. Increment View
+                    ref.update({ views: firebase.firestore.FieldValue.increment(1) });
+                } else {
+                    document.getElementById('loader').innerHTML = "<h2 style='color:red'>Site Not Found</h2>";
+                }
+            });
+        }
+
+        window.doRep = function(sid) {
+            if(confirm("Report this site?")) {
+                const db2 = firebase.firestore();
+                db2.collection('sites').doc(sid).update({
+                    reportCount: firebase.firestore.FieldValue.increment(1)
+                }).then(() => alert("Reported!"));
+            }
+        }
+    </script>
+</body>
+</html>
