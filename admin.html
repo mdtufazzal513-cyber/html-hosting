@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Super Admin</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        body{padding:20px; font-family:sans-serif; background: #f4f4f4;}
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .site-item { background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        input { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; }
+        button { background: #2563eb; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 5px; }
+        button.del { background: #ef4444; }
+        button.logout { background: #4b5563; margin-top: 20px; }
+        h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .nav { margin-bottom: 20px; }
+        .nav button { margin-right: 10px; background: #ddd; color: #333; }
+        .nav button.active { background: #2563eb; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login Section -->
+        <div id="login">
+            <h3 style="color:red;">শুধুমাত্র এডমিন এক্সেস</h3>
+            <p>লগইন করতে নির্ধারিত এডমিন ইমেইল ব্যবহার করুন।</p>
+            <input type="email" id="email" placeholder="Email (mdtufazzal513@gmail.com)">
+            <input type="password" id="pass" placeholder="Password">
+            <button onclick="login()">Login</button>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div id="dash" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Admin Dashboard</h3>
+                <button onclick="auth.signOut()" class="logout">Logout</button>
+            </div>
+            
+            <div class="nav">
+                <button onclick="switchTab('sites')" id="btn-sites" class="active">All Sites</button>
+                <button onclick="switchTab('settings')" id="btn-settings">Settings (Support)</button>
+            </div>
+
+            <!-- Sites Tab -->
+            <div id="tab-sites">
+                <h4>Active Sites</h4>
+                <div id="list">Loading...</div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="tab-settings" style="display:none;">
+                <h4>Telegram Support Link</h4>
+                <p>ইউজার প্যানেলের সাপোর্ট আইকনের লিংক এখান থেকে পরিবর্তন করুন।</p>
+                <input type="text" id="teleLink" placeholder="https://t.me/username">
+                <button onclick="saveSettings()">Save Link</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-fR5yCte_c2pHpd0WD5IVjWmUvfUl5wA",
+            authDomain: "html-code-hosting.firebaseapp.com",
+            projectId: "html-code-hosting",
+            storageBucket: "html-code-hosting.firebasestorage.app",
+            messagingSenderId: "22191194064",
+            appId: "1:22191194064:web:47fcd0b42f0f770ede43d5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const ADMIN_EMAIL = "mdtufazzal513@gmail.com";
+
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                // Check if the logged in user is the specific admin
+                if(user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()){
+                    document.getElementById('login').style.display='none';
+                    document.getElementById('dash').style.display='block';
+                    loadSites();
+                    loadSettings();
+                } else {
+                    alert("Access Denied! You are not the admin.");
+                    auth.signOut();
+                }
+            } else {
+                document.getElementById('login').style.display='block';
+                document.getElementById('dash').style.display='none';
+            }
+        });
+
+        function login(){
+            const e = document.getElementById('email').value;
+            const p = document.getElementById('pass').value;
+            if(e.toLowerCase() !== ADMIN_EMAIL.toLowerCase()){
+                return alert("ভুল ইমেইল! শুধুমাত্র এডমিন ইমেইল গ্রহণযোগ্য।");
+            }
+            auth.signInWithEmailAndPassword(e,p).catch(err=>alert(err.message));
+        }
+
+        function switchTab(tab){
+            document.getElementById('tab-sites').style.display = tab==='sites'?'block':'none';
+            document.getElementById('tab-settings').style.display = tab==='settings'?'block':'none';
+            document.getElementById('btn-sites').className = tab==='sites'?'active':'';
+            document.getElementById('btn-settings').className = tab==='settings'?'active':'';
+        }
+
+        function loadSites(){
+            db.collection('sites').orderBy('createdAt', 'desc').limit(20).onSnapshot(snap => {
+                const list = document.getElementById('list');
+                list.innerHTML = '';
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    if(d.status !== 'deleted'){
+                        list.innerHTML += `
+                            <div class="site-item">
+                                <b>ID:</b> ${doc.id} <br>
+                                <a href="view.html?id=${doc.id}" target="_blank">View Site</a> 
+                                <button class="del" onclick="del('${doc.id}')" style="float:right;">Delete</button>
+                            </div>`;
+                    }
+                });
+            });
+        }
+
+        function loadSettings(){
+            db.collection('settings').doc('config').get().then(doc => {
+                if(doc.exists){
+                    document.getElementById('teleLink').value = doc.data().supportLink || '';
+                }
+            });
+        }
+
+        function saveSettings(){
+            const link = document.getElementById('teleLink').value;
+            db.collection('settings').doc('config').set({ supportLink: link }, { merge: true })
+            .then(() => alert("সেটিংস সেভ হয়েছে!"))
+            .catch(err => alert("এরর: " + err.message));
+        }
+
+        function del(id){
+            if(confirm('Are you sure to delete this site?')) db.collection('sites').doc(id).update({status:'deleted'});
+        }
+    </script>
+</body>
+</html>
