@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Host - User Panel</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f0f9ff; text-align: center; margin: 0; }
+        .box { max-width: 450px; margin: 40px auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative; }
+        .hidden { display: none; }
+        
+        input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        textarea { height: 150px; font-family: monospace; }
+        
+        .file-upload { border: 2px dashed #2563eb; padding: 15px; background: #f8fafc; cursor: pointer; border-radius: 6px; margin: 10px 0; }
+        .file-upload p { margin: 0; color: #555; font-size: 13px; }
+        
+        button { background: #2563eb; color: white; padding: 12px; border: none; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; margin-top: 10px; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #1d4ed8; }
+        button:disabled { background: #93c5fd; cursor: not-allowed; }
+        button.secondary { background: #fff; color: #2563eb; border: 1px solid #2563eb; margin-top: 5px; }
+        
+        .link { color: #2563eb; cursor: pointer; font-size: 14px; text-decoration: underline; margin-top: 10px; display: inline-block; }
+        .notice { background: #fff3cd; color: #856404; padding: 10px; font-size: 13px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #ffeeba; }
+        
+        .support-float {
+            position: fixed; bottom: 20px; right: 20px;
+            background-color: #0088cc; color: white;
+            width: 55px; height: 55px; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer;
+            z-index: 1000; text-decoration: none; font-size: 28px;
+        }
+    </style>
+</head>
+<body>
+
+    <a href="#" id="supportBtn" class="support-float" target="_blank" title="Telegram Support">✈️</a>
+
+    <!-- LOGIN PAGE -->
+    <div id="view-login" class="box">
+        <h2>লগইন করুন</h2>
+        <input type="email" id="l-email" placeholder="ইমেইল">
+        <input type="password" id="l-pass" placeholder="পাসওয়ার্ড">
+        <button onclick="handleLogin()">লগইন</button>
+        <br>
+        <span class="link" onclick="showView('forgot')">পাসওয়ার্ড ভুলে গেছেন?</span>
+        <br><br>
+        <p>অ্যাকাউন্ট নেই? <span class="link" onclick="showView('signup')">নতুন অ্যাকাউন্ট তৈরি করুন</span></p>
+    </div>
+
+    <!-- SIGNUP PAGE -->
+    <div id="view-signup" class="box hidden">
+        <h2>অ্যাকাউন্ট তৈরি করুন</h2>
+        <input type="email" id="s-email" placeholder="ইমেইল">
+        <input type="password" id="s-pass" placeholder="পাসওয়ার্ড">
+        <button onclick="handleSignup()">সাইন আপ</button>
+        <br>
+        <p>ইতোমধ্যে অ্যাকাউন্ট আছে? <span class="link" onclick="showView('login')">লগইন করুন</span></p>
+    </div>
+
+    <!-- FORGOT PASSWORD PAGE -->
+    <div id="view-forgot" class="box hidden">
+        <h2>পাসওয়ার্ড রিসেট</h2>
+        <div class="notice">
+            ⚠️ নোটিশ: একটি ইমেইলে ২৪ ঘন্টায় সর্বোচ্চ ৩ বার রিসেট লিংক পাঠানো যাবে।
+        </div>
+        <input type="email" id="f-email" placeholder="আপনার ইমেইল দিন">
+        <button onclick="handleForgot()">রিসেট লিংক পাঠান</button>
+        <button class="secondary" onclick="showView('login')">পিছনে যান</button>
+    </div>
+
+    <!-- VERIFICATION PAGE -->
+    <div id="view-verify" class="box hidden">
+        <h2>ইমেইল ভেরিফিকেশন</h2>
+        <p>আপনার ইমেইলে একটি ভেরিফিকেশন লিংক পাঠানো হয়েছে। স্প্যাম ফোল্ডার চেক করুন।</p>
+        <div class="notice">
+            ⚠️ ২৪ ঘন্টায় সর্বোচ্চ ৪ বার ভেরিফিকেশন লিংক পাঠানো যাবে।
+        </div>
+        <button onclick="resendVerification()">লিংক আবার পাঠান</button>
+        <button onclick="checkVerified()" style="background: green;">I Have Verified</button>
+        <button class="secondary" onclick="auth.signOut()">অন্য একাউন্টে লগইন করুন</button>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="view-dash" class="box hidden">
+        <div style="display:flex; justify-content:space-between; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">
+            <span style="font-weight:bold; color:#333;">ড্যাশবোর্ড</span>
+            <span class="link" onclick="auth.signOut()" style="margin:0; color:red;">লগআউট</span>
+        </div>
+        
+        <h3>🚀 সাইট পাবলিশার</h3>
+
+        <input type="text" id="site-name" placeholder="ওয়েবসাইটের নাম (যেমন: My Portfolio)">
+        <input type="number" id="site-pin" placeholder="সিকিউরিটি পিন (PIN) দিন">
+
+        <div class="file-upload" onclick="document.getElementById('html-file').click()">
+            <p>📁 <b>.html ফাইল বেছে নিন</b> অথবা কোড নিচে লিখুন</p>
+            <input type="file" id="html-file" accept=".html, .htm" style="display:none;" onchange="handleFileUpload(this)">
+        </div>
+
+        <textarea id="code" placeholder="আপনার HTML কোড এখানে দেখা যাবে..."></textarea>
+        
+        <button onclick="publish()" id="pubBtn">পাবলিশ করুন</button>
+        
+        <div id="pub-result" class="hidden" style="margin-top:15px; background:#dcfce7; padding:15px; border-radius:5px; border:1px solid #bbf7d0;">
+            <p style="color:#166534; margin:0 0 5px 0; font-weight:bold;">✅ সাকসেস! আপনার লিংক:</p>
+            <a id="pub-link" href="#" target="_blank" style="word-break: break-all; color:#15803d; font-weight:bold;">...</a>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD-fR5yCte_c2pHpd0WD5IVjWmUvfUl5wA",
+            authDomain: "html-code-hosting.firebaseapp.com",
+            projectId: "html-code-hosting",
+            storageBucket: "html-code-hosting.firebasestorage.app",
+            messagingSenderId: "22191194064",
+            appId: "1:22191194064:web:47fcd0b42f0f770ede43d5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // ---------------- Navigation & Auth Logic ----------------
+        function showView(viewId) {
+            document.querySelectorAll('.box').forEach(el => el.classList.add('hidden'));
+            document.getElementById('view-' + viewId).classList.remove('hidden');
+        }
+
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                user.emailVerified ? showView('dash') : showView('verify');
+            } else {
+                showView('login');
+            }
+            loadSupportLink();
+        });
+
+        function handleLogin() {
+            const e = document.getElementById('l-email').value;
+            const p = document.getElementById('l-pass').value;
+            if(!e || !p) return alert("সব তথ্য পূরণ করুন");
+            auth.signInWithEmailAndPassword(e, p).catch(err => alert(err.message));
+        }
+
+        function handleSignup() {
+            const e = document.getElementById('s-email').value;
+            const p = document.getElementById('s-pass').value;
+            if(!e || !p) return alert("সব তথ্য পূরণ করুন");
+            auth.createUserWithEmailAndPassword(e, p).then((cred) => {
+                sendVerifyEmail(cred.user);
+            }).catch(err => alert(err.message));
+        }
+
+        async function checkRateLimit(email, type, maxLimit) {
+            const today = new Date().toDateString();
+            const docRef = db.collection('rate_limits').doc(email + '_' + type);
+            try {
+                const doc = await docRef.get();
+                if(doc.exists) {
+                    if(doc.data().date === today) {
+                        if(doc.data().count >= maxLimit) return false;
+                        await docRef.update({ count: firebase.firestore.FieldValue.increment(1) });
+                        return true;
+                    }
+                }
+                await docRef.set({ date: today, count: 1 });
+                return true;
+            } catch (e) { return true; }
+        }
+
+        async function handleForgot() {
+            const e = document.getElementById('f-email').value;
+            if(!e) return alert("ইমেইল দিন");
+            if(await checkRateLimit(e, 'forgot', 3)) {
+                auth.sendPasswordResetEmail(e)
+                    .then(() => { alert("রিসেট লিংক পাঠানো হয়েছে।"); showView('login'); })
+                    .catch(err => alert(err.message));
+            } else alert("লিমিট শেষ!");
+        }
+
+        async function sendVerifyEmail(user) {
+            if(await checkRateLimit(user.email, 'verify', 4)) {
+                user.sendEmailVerification().then(() => alert("ভেরিফিকেশন মেইল পাঠানো হয়েছে।"));
+            } else alert("লিমিট শেষ!");
+        }
+
+        function resendVerification() { if(auth.currentUser) sendVerifyEmail(auth.currentUser); }
+
+        async function checkVerified() {
+            if(auth.currentUser) {
+                await auth.currentUser.reload();
+                auth.currentUser.emailVerified ? showView('dash') : alert("একাউন্ট ভেরিফাই হয়নি!");
+            }
+        }
+
+        function handleFileUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+            if (file.type !== "text/html" && !file.name.endsWith('.html')) {
+                alert("শুধুমাত্র .html ফাইল আপলোড করুন।");
+                input.value = ""; return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) { document.getElementById('code').value = e.target.result; };
+            reader.readAsText(file);
+        }
+
+        // ---------------- Updated Publish Logic (Duplicate Check) ----------------
+        function publish() {
+            const html = document.getElementById('code').value;
+            const siteName = document.getElementById('site-name').value;
+            const sitePin = document.getElementById('site-pin').value;
+
+            if (!siteName) return alert("ওয়েবসাইটের নাম দিন!");
+            if (!sitePin) return alert("পিন নম্বর দিন!");
+            if (!html) return alert("কোড বা ফাইল দিন!");
+            
+            const btn = document.getElementById('pubBtn');
+            btn.innerText = "যাচাই করা হচ্ছে..."; // Checking status
+            btn.disabled = true;
+
+            // Step 1: Check database for existing site with same Name & Pin & Active Status
+            db.collection('sites')
+                .where('name', '==', siteName)
+                .where('pin', '==', sitePin)
+                .where('status', '==', 'active')
+                .get()
+                .then(snapshot => {
+                    let isDuplicate = false;
+
+                    // Step 2: Loop through results to compare HTML content
+                    snapshot.forEach(doc => {
+                        // Compare the new HTML with existing HTML in DB
+                        if(doc.data().html === html) {
+                            isDuplicate = true;
+                        }
+                    });
+
+                    if(isDuplicate) {
+                        // Duplicate found
+                        alert("⚠️ এই ওয়েবসাইটটি ইতিমধ্যেই পাবলিশ করা আছে!\nএকই নাম, পিন এবং কোড দিয়ে দুইবার পাবলিশ করা যাবে না।");
+                        btn.innerText = "পাবলিশ করুন";
+                        btn.disabled = false;
+                        return; // Stop execution
+                    }
+
+                    // Step 3: No duplicate found, proceed to publish
+                    btn.innerText = "পাবলিশ হচ্ছে...";
+                    
+                    return db.collection('sites').add({
+                        name: siteName,
+                        pin: sitePin,
+                        html: html,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        status: 'active',
+                        author: auth.currentUser.email
+                    });
+                })
+                .then((doc) => {
+                    if(!doc) return; // If duplicated, doc is undefined
+                    
+                    const url = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + '/view.html?id=' + doc.id;
+                    document.getElementById('pub-link').href = url;
+                    document.getElementById('pub-link').innerText = url;
+                    document.getElementById('pub-result').classList.remove('hidden');
+                    
+                    // Reset fields
+                    document.getElementById('code').value = "";
+                    document.getElementById('site-name').value = "";
+                    document.getElementById('site-pin').value = "";
+                    
+                    btn.innerText = "পাবলিশ করুন";
+                    btn.disabled = false;
+                })
+                .catch((err) => {
+                    // Note: If you see "The query requires an index" in console, you need to click the link in console to create it in Firebase.
+                    console.error(err);
+                    alert("এরর: " + err.message);
+                    btn.innerText = "পাবলিশ করুন";
+                    btn.disabled = false;
+                });
+        }
+
+        function loadSupportLink() {
+            db.collection('settings').doc('config').get().then(doc => {
+                document.getElementById('supportBtn').href = (doc.exists && doc.data().supportLink) ? doc.data().supportLink : "#";
+            });
+        }
+    </script>
+</body>
+</html>
